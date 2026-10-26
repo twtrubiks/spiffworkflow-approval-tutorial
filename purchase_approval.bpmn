@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+
+  <!-- ===== 流程邏輯：SpiffWorkflow 只讀這一段 ===== -->
+  <bpmn:process id="purchase_approval" name="請購簽核" isExecutable="true">
+    <bpmn:startEvent id="start" name="開始">
+      <bpmn:outgoing>flow_0</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- 申請人的關卡：送出時程式會直接完成它；任何一關退回都會 reset 回到這裡，申請人改完再重新送出 -->
+    <bpmn:userTask id="applicant_revise" name="申請人填寫">
+      <bpmn:incoming>flow_0</bpmn:incoming>
+      <bpmn:outgoing>flow_1</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="manager_approve" name="直屬主管審核">
+      <bpmn:incoming>flow_1</bpmn:incoming>
+      <bpmn:outgoing>flow_2</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="amount_gateway" name="金額判斷" default="flow_small">
+      <bpmn:incoming>flow_2</bpmn:incoming>
+      <bpmn:outgoing>flow_big</bpmn:outgoing>
+      <bpmn:outgoing>flow_small</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- 會簽：parallel gateway 分岔後，財務長與法務同時待簽，兩人都核准才會通過合併節點 -->
+    <bpmn:parallelGateway id="countersign_split" name="會簽開始">
+      <bpmn:incoming>flow_big</bpmn:incoming>
+      <bpmn:outgoing>flow_cfo</bpmn:outgoing>
+      <bpmn:outgoing>flow_legal</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <bpmn:userTask id="cfo_approve" name="財務長審核">
+      <bpmn:incoming>flow_cfo</bpmn:incoming>
+      <bpmn:outgoing>flow_cfo_done</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:userTask id="legal_approve" name="法務審核">
+      <bpmn:incoming>flow_legal</bpmn:incoming>
+      <bpmn:outgoing>flow_legal_done</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:parallelGateway id="countersign_join" name="會簽合併">
+      <bpmn:incoming>flow_cfo_done</bpmn:incoming>
+      <bpmn:incoming>flow_legal_done</bpmn:incoming>
+      <bpmn:outgoing>flow_joined</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <bpmn:scriptTask id="write_back" name="回寫單據狀態">
+      <bpmn:incoming>flow_small</bpmn:incoming>
+      <bpmn:incoming>flow_joined</bpmn:incoming>
+      <bpmn:outgoing>flow_end</bpmn:outgoing>
+      <bpmn:script>approval_result = 'approved'</bpmn:script>
+    </bpmn:scriptTask>
+
+    <bpmn:endEvent id="end" name="結案">
+      <bpmn:incoming>flow_end</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="flow_0" sourceRef="start" targetRef="applicant_revise" />
+    <bpmn:sequenceFlow id="flow_1" sourceRef="applicant_revise" targetRef="manager_approve" />
+    <bpmn:sequenceFlow id="flow_2" sourceRef="manager_approve" targetRef="amount_gateway" />
+    <bpmn:sequenceFlow id="flow_big" name="金額 &gt; 10000" sourceRef="amount_gateway" targetRef="countersign_split">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">self.amount_total &gt; 10000</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_small" name="其他（預設）" sourceRef="amount_gateway" targetRef="write_back" />
+    <bpmn:sequenceFlow id="flow_cfo" sourceRef="countersign_split" targetRef="cfo_approve" />
+    <bpmn:sequenceFlow id="flow_legal" sourceRef="countersign_split" targetRef="legal_approve" />
+    <bpmn:sequenceFlow id="flow_cfo_done" sourceRef="cfo_approve" targetRef="countersign_join" />
+    <bpmn:sequenceFlow id="flow_legal_done" sourceRef="legal_approve" targetRef="countersign_join" />
+    <bpmn:sequenceFlow id="flow_joined" sourceRef="countersign_join" targetRef="write_back" />
+    <bpmn:sequenceFlow id="flow_end" sourceRef="write_back" targetRef="end" />
+  </bpmn:process>
+
+  <!-- ===== 圖面座標：只給畫圖工具（bpmn-js 等）用，SpiffWorkflow 會忽略 ===== -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="purchase_approval">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="22" y="282" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="28" y="325" width="24" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="applicant_revise_di" bpmnElement="applicant_revise">
+        <dc:Bounds x="100" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="manager_approve_di" bpmnElement="manager_approve">
+        <dc:Bounds x="240" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="amount_gateway_di" bpmnElement="amount_gateway" isMarkerVisible="true">
+        <dc:Bounds x="395" y="275" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="396" y="332" width="48" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="countersign_split_di" bpmnElement="countersign_split">
+        <dc:Bounds x="495" y="125" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="438" y="110" width="48" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="cfo_approve_di" bpmnElement="cfo_approve">
+        <dc:Bounds x="600" y="50" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="legal_approve_di" bpmnElement="legal_approve">
+        <dc:Bounds x="600" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="countersign_join_di" bpmnElement="countersign_join">
+        <dc:Bounds x="755" y="125" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="812" y="110" width="48" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="write_back_di" bpmnElement="write_back">
+        <dc:Bounds x="860" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end">
+        <dc:Bounds x="1012" y="282" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1018" y="325" width="24" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="flow_0_di" bpmnElement="flow_0">
+        <di:waypoint x="58" y="300" />
+        <di:waypoint x="100" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_1_di" bpmnElement="flow_1">
+        <di:waypoint x="200" y="300" />
+        <di:waypoint x="240" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_2_di" bpmnElement="flow_2">
+        <di:waypoint x="340" y="300" />
+        <di:waypoint x="395" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_big_di" bpmnElement="flow_big">
+        <di:waypoint x="420" y="275" />
+        <di:waypoint x="420" y="150" />
+        <di:waypoint x="495" y="150" />
+        <bpmndi:BPMNLabel><dc:Bounds x="428" y="200" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_small_di" bpmnElement="flow_small">
+        <di:waypoint x="445" y="300" />
+        <di:waypoint x="860" y="300" />
+        <bpmndi:BPMNLabel><dc:Bounds x="600" y="280" width="72" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_cfo_di" bpmnElement="flow_cfo">
+        <di:waypoint x="520" y="125" />
+        <di:waypoint x="520" y="90" />
+        <di:waypoint x="600" y="90" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_legal_di" bpmnElement="flow_legal">
+        <di:waypoint x="520" y="175" />
+        <di:waypoint x="520" y="210" />
+        <di:waypoint x="600" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_cfo_done_di" bpmnElement="flow_cfo_done">
+        <di:waypoint x="700" y="90" />
+        <di:waypoint x="780" y="90" />
+        <di:waypoint x="780" y="125" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_legal_done_di" bpmnElement="flow_legal_done">
+        <di:waypoint x="700" y="210" />
+        <di:waypoint x="780" y="210" />
+        <di:waypoint x="780" y="175" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_joined_di" bpmnElement="flow_joined">
+        <di:waypoint x="805" y="150" />
+        <di:waypoint x="910" y="150" />
+        <di:waypoint x="910" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_end_di" bpmnElement="flow_end">
+        <di:waypoint x="960" y="300" />
+        <di:waypoint x="1012" y="300" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

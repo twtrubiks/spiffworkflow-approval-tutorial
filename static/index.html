@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpiffWorkflow 簽核模擬</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/diagram-js.css">
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-js.css">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --accent: #0969da; --accent-bg: #ddf4ff; --code-bg: #f6f8fa;
+    --ok: #1a7f37; --ok-bg: #dafbe1; --warn: #bc4c00; --warn-bg: #fff1e5;
+    --bad: #cf222e; --bad-bg: #ffebe9; --gray: #57606a; --gray-bg: #eaeef2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #8d96a0; --border: #30363d;
+      --accent: #4493f8; --accent-bg: #0c2d6b; --code-bg: #0d1117;
+      --ok: #3fb950; --ok-bg: #0f2e1a; --warn: #db6d28; --warn-bg: #3a1d05;
+      --bad: #f85149; --bad-bg: #3c0d0d; --gray: #8d96a0; --gray-bg: #21262d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.6 system-ui, "Noto Sans TC", "PingFang TC", sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px;
+         font-family: ui-monospace, "JetBrains Mono", monospace; }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 15px; margin: 0; }
+  .muted { color: var(--muted); }
+
+  /* ---- 版面 ---- */
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 16px;
+            background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+  .topbar .sub { color: var(--muted); font-size: 13px; }
+  @media (max-width: 640px) { .topbar { position: static; } }
+  .who { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .who select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); min-width: 190px; }
+  .topbar a { color: var(--accent); text-decoration: none; }
+  .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px;
+            max-width: 1400px; margin: 0 auto; padding: 16px; }
+  .content { display: grid; gap: 16px; min-width: 0; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .sidebar { display: grid; gap: 16px; align-content: start; }
+  @media (max-width: 1000px) { .layout, .grid2 { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+
+  /* ---- 表單與按鈕 ---- */
+  label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
+  input, textarea { width: 100%; padding: 6px 10px; margin-top: 2px; border: 1px solid var(--border);
+                    border-radius: 8px; background: var(--card); }
+  textarea { resize: vertical; min-height: 38px; }
+  button { cursor: pointer; border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 6px 12px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { cursor: not-allowed; opacity: .45; }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; }
+  button.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+  button.bad { color: var(--bad); border-color: var(--bad); }
+  button.link { border: none; background: none; padding: 0; color: var(--accent); }
+  button.link.danger { color: var(--bad); }
+  .quick { display: flex; gap: 6px; margin: -2px 0 8px; }
+  .quick button { padding: 2px 10px; font-size: 13px; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
+  details.howto summary { cursor: pointer; font-weight: 600; }
+  details.howto ol { margin: 8px 0 0; padding-left: 20px; }
+  .org ul { list-style: none; margin: 0; padding-left: 18px; border-left: 1px dashed var(--border); }
+  .org > ul { padding-left: 0; border-left: 0; }
+  .org li { margin: 4px 0; font-size: 13px; }
+  .org li .signs { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .org li.me > span:first-child { font-weight: 600; }
+
+  /* ---- 標籤 ---- */
+  .chip { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px; line-height: 20px; white-space: nowrap;
+          background: var(--gray-bg); color: var(--gray); }
+  .chip.running, .chip.READY { background: var(--accent-bg); color: var(--accent); }
+  .chip.done, .chip.COMPLETED { background: var(--ok-bg); color: var(--ok); }
+  .chip.cancelled, .chip.CANCELLED { background: var(--bad-bg); color: var(--bad); }
+  .chip.WAITING { background: var(--warn-bg); color: var(--warn); }
+  .chip.LIKELY, .chip.MAYBE { background: transparent; border: 1px dashed var(--gray); line-height: 18px; }
+  .chip.turn { background: var(--accent); color: #fff; }
+
+  /* ---- 單據列表 ---- */
+  #request-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 420px; overflow: auto; }
+  #request-list li { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+  #request-list li:hover { border-color: var(--accent); }
+  #request-list li.active { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  #request-list .r1 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  #request-list .r2, #request-list .r3 { font-size: 12.5px; color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+  /* ---- 流程圖 ---- */
+  /* 畫布固定白底，bpmn-js 的圖是黑線白底 */
+  #canvas { height: 400px; background: #fff; border-radius: 8px; border: 1px solid var(--border); }
+  @media (max-width: 640px) { #canvas { height: 280px; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; }
+  .djs-element.st-COMPLETED .djs-visual > :nth-child(1) { fill: #dafbe1 !important; stroke: #1a7f37 !important; }
+  .djs-element.st-READY .djs-visual > :nth-child(1) { fill: #ddf4ff !important; stroke: #0969da !important; stroke-width: 3px !important; }
+  .djs-element.st-WAITING .djs-visual > :nth-child(1) { fill: #fff1e5 !important; stroke: #bc4c00 !important; stroke-width: 3px !important; }
+  .djs-element.st-FUTURE .djs-visual > :nth-child(1) { stroke: #57606a !important; }
+  .djs-element.st-LIKELY .djs-visual > :nth-child(1) { stroke: #8c959f !important; stroke-dasharray: 7 4 !important; }
+  .djs-element.st-MAYBE .djs-visual > :nth-child(1) { stroke: #afb8c1 !important; stroke-dasharray: 2 4 !important; }
+  .djs-element.st-CANCELLED .djs-visual > :nth-child(1) { fill: #ffebe9 !important; stroke: #cf222e !important; }
+  .djs-connection.flow-taken .djs-visual > path { stroke: #1a7f37 !important; stroke-width: 3px !important; }
+  .djs-element.my-turn .djs-visual > :nth-child(1) { stroke-width: 5px !important; animation: pulse 1.2s ease-in-out infinite; }
+  .djs-element.picked .djs-visual > :nth-child(1), .djs-element.tree-hover .djs-visual > :nth-child(1) {
+    stroke: #8250df !important; stroke-width: 4px !important; }
+  .djs-connection.picked .djs-visual > path { stroke: #8250df !important; }
+  @keyframes pulse { 50% { stroke-opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .djs-element.my-turn .djs-visual > :nth-child(1) { animation: none; } }
+
+  /* ---- 待簽關卡 ---- */
+  .task { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .task.mine { border-color: var(--accent); background: var(--accent-bg); }
+  .task .t1 { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .task .meta { font-size: 12.5px; color: var(--muted); margin: 2px 0 8px; }
+  .task .btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+  .notice { padding: 10px 12px; border-radius: 8px; background: var(--gray-bg); }
+  .notice.done { background: var(--ok-bg); color: var(--ok); }
+  .notice.cancelled { background: var(--bad-bg); color: var(--bad); }
+  pre.data { margin: 8px 0 0; padding: 8px 10px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+             overflow: auto; font: 12.5px/1.5 ui-monospace, "JetBrains Mono", monospace; }
+
+  /* ---- 簽核紀錄 ---- */
+  .history { list-style: none; margin: 0; padding: 0; }
+  .history li { padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .history li:first-child { border-top: none; }
+  .history .time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .history .act-核准 { color: var(--ok); font-weight: 600; }
+  .history .act-自動核准 { color: var(--ok); }
+  .history .act-退回 { color: var(--bad); font-weight: 600; }
+  .history .act-送出, .history .act-重新送出 { color: var(--accent); font-weight: 600; }
+  .history .act-撤回 { color: var(--bad); font-weight: 600; }
+  .task .fields { display: flex; gap: 8px; margin: 6px 0; }
+  .task .fields label { flex: 1; margin: 0; font-size: 12.5px; }
+  .task .fields input { width: 100%; box-sizing: border-box; }
+
+  /* ---- task tree ---- */
+  .tree { font-size: 13px; }
+  .tree .row { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 6px; cursor: default; }
+  .tree .row:hover { background: var(--code-bg); }
+  .tree .name { white-space: nowrap; }
+  .tree .type { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree .row .chip { margin-left: auto; }
+  .tree .branch { color: var(--muted); font-family: ui-monospace, monospace; white-space: pre; }
+  #node-info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 13px; }
+  #node-info dt { color: var(--muted); }
+  #node-info dd { margin: 0; word-break: break-word; }
+  .spiff { margin-top: 10px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--code-bg);
+           font-size: 13px; border-radius: 0 6px 6px 0; }
+
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: calc(100% - 32px);
+           padding: 10px 16px; border-radius: 8px; background: #1f2328; color: #fff; font-size: 14px;
+           box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+  #toast.show { opacity: 1; }
+  #toast.error { background: var(--bad); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>SpiffWorkflow 簽核模擬</h1>
+    <div class="sub">切換身分，模擬送出、核准、退回。流程定義在 <code>purchase_approval.bpmn</code></div>
+  </div>
+  <div class="who">
+    <label for="user" style="margin:0">目前身分</label>
+    <select id="user"></select>
+    <span id="todo" class="chip"></span>
+  </div>
+  <a href="/docs" target="_blank" rel="noopener">API 文件 ↗</a>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <section class="card">
+      <div class="card-head"><h2>送出請購單</h2></div>
+      <form id="create-form">
+        <label>標題<input name="title" value="請購單" maxlength="50" required></label>
+        <label>金額<input name="amount_total" type="number" min="1" step="1" value="5000" required></label>
+        <div class="quick">
+          <button type="button" data-amount="5000">5,000</button>
+          <button type="button" data-amount="50000">50,000</button>
+        </div>
+        <p class="hint">金額 &gt; 10,000 會在主管核准後，進入財務長＋法務的並行會簽</p>
+        <p class="hint" id="manager-hint"></p>
+        <button type="submit" class="primary" id="create-btn">送出</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>單據</h2><button id="clear" class="link danger" type="button">清空全部</button></div>
+      <ul id="request-list"></ul>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>組織與簽核權限</h2></div>
+      <div id="org" class="org"></div>
+      <p class="hint" style="margin:8px 0 0">上下關係決定「直屬主管審核」由誰簽；財務長、法務是固定職位。申請人不能簽自己的單，職位只有申請人自己時改由主管簽。同一個人這一輪核准過，之後輪到他的關卡自動核准。</p>
+    </section>
+
+    <section class="card">
+      <details class="howto" open>
+        <summary>建議玩法</summary>
+        <ol>
+          <li>用 <b>dave</b> 送出一張 50,000 的單</li>
+          <li>切換成 <b>alice</b> 核准，流程走到會簽</li>
+          <li>切換成 <b>erin</b> 核准，看「會簽合併」變成等待中</li>
+          <li>切換成 <b>carol</b> 退回，單據回到申請人 dave，erin 簽過的也被清掉</li>
+          <li>切換成 <b>dave</b> 改金額重新送出，或直接撤回作廢</li>
+        </ol>
+        <p class="hint" style="margin:8px 0 0">進階，這個範例自己的業務規則：</p>
+        <ol start="6">
+          <li>切換成 alice 送一張 5,000 的單：第一關輪到 carol，alice 自己不能簽</li>
+          <li>切換成 erin 送一張 50,000 的單，再切成 carol 核准：財務長、法務都自動核准，直接結案</li>
+          <li>切換成 carol 送一張 50,000 的單，再切成 frank 核准：財務長改由 frank 簽並自動核准，只剩法務</li>
+        </ol>
+      </details>
+    </section>
+  </aside>
+
+  <section class="content">
+    <div class="card">
+      <div class="card-head">
+        <h2 id="diagram-title">流程圖</h2>
+        <div class="legend">
+          <span class="chip READY">輪到這關</span>
+          <span class="chip WAITING">等待中</span>
+          <span class="chip COMPLETED">已完成</span>
+          <span class="chip">一定會到</span>
+          <span class="chip LIKELY">預測</span>
+          <span class="chip CANCELLED">已取消</span>
+        </div>
+      </div>
+      <div id="canvas"></div>
+      <p class="hint" style="margin:8px 0 0">點圖上的節點或連線看說明。閃爍的框是目前身分可以簽的關卡；綠色粗線是實際走過的路。</p>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-head"><h2>待簽關卡</h2></div>
+        <div id="actions"><p class="empty">先在左邊選一張單據。</p></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>簽核紀錄</h2></div>
+        <ul class="history" id="history"><li class="empty">—</li></ul>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-head">
+          <h2>引擎內部狀態（task tree）</h2>
+          <a id="json-link" class="muted" target="_blank" rel="noopener" style="font-size:12.5px"></a>
+        </div>
+        <div class="tree" id="tree"><p class="empty">—</p></div>
+        <p class="hint" style="margin:10px 0 0">這是 SpiffWorkflow 內部的樹。同一個節點出現好幾次是正常的：預測的分支、並行的分支各有一份。滑過一列，圖上會標出對應的節點。</p>
+      </div>
+      <div class="card" id="node-info">
+        <div class="card-head"><h2>節點說明</h2></div>
+        <p class="empty">點流程圖上的節點或連線。</p>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-navigated-viewer.production.min.js"></script>
+<script>
+  const STATE_LABEL = {
+    READY: '輪到這關', WAITING: '等待中', STARTED: '執行中', COMPLETED: '已完成', FUTURE: '一定會到',
+    LIKELY: '預測：大概會到', MAYBE: '預測：可能會到', CANCELLED: '已取消', ERROR: '錯誤',
+  };
+  const STATUS_LABEL = { running: '簽核中', done: '已結案', cancelled: '已作廢' };
+  const TYPE_INFO = {
+    'bpmn:StartEvent': ['開始事件', '建立 workflow 後呼叫 do_engine_steps()，會自動通過這裡。'],
+    'bpmn:EndEvent': ['結束事件', '走到這裡整個流程結束，workflow.completed 變成 True。'],
+    'bpmn:UserTask': ['人工任務', '流程停在這裡（READY），等程式呼叫 task.complete()。「申請人填寫」送出時由程式直接完成，被退回時會 reset 回到這一關。誰能簽是 workflow.py 決定的（第一關看申請人的直屬主管 MANAGER_OF，其他關看 APPROVERS，申請人不能簽自己的單），SpiffWorkflow 不管權限。'],
+    'bpmn:ScriptTask': ['腳本任務', 'do_engine_steps() 時自動交給 script engine 執行。這個範例的 RecordScriptEngine 會在這一關把單據狀態改成 approved。'],
+    'bpmn:ExclusiveGateway': ['互斥閘道', '逐條計算出去連線的條件，只走成立的那一條，都不成立就走 default。還沒走到時，引擎不會先算條件，只把預設線標成 LIKELY、條件線標成 MAYBE。'],
+    'bpmn:ParallelGateway': ['並行閘道', '分岔：所有出去的連線同時走，所以財務長和法務會同時待簽。合併：要等所有進來的分支都到齊才往下走，先到的分支停在 WAITING。'],
+    'bpmn:SequenceFlow': ['連線', '把兩個節點接起來。從互斥閘道出去的連線可以帶條件。'],
+    'bpmn:Process': ['流程', 'parser.get_process_ids() 取到的就是這個 id。'],
+  };
+
+  const $ = sel => document.querySelector(sel);
+  const viewer = new BpmnJS({ container: '#canvas' });
+  const canvas = viewer.get('canvas');
+  const registry = viewer.get('elementRegistry');
+
+  let users = [];
+  let detail = null;
+  let lastListJson = '', lastDetailJson = '';
+  let markers = [];
+  let picked = null;
+  const params = new URLSearchParams(location.search);
+  const state = { user: params.get('user') || 'dave', req: params.get('req') };
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const money = n => Number(n).toLocaleString('en-US');
+  const roleOf = uid => (users.find(u => u.id === uid) || {}).role || '';
+  const who = uid => `${uid}（${roleOf(uid)}）`;
+  const managerOf = uid => (users.find(u => u.id === uid) || {}).manager;
+  // 下拉選單用：多顯示直屬主管，一眼看出誰會簽這個人的第一關
+  const optionLabel = u => `${u.id}（${u.role}${u.manager ? `，主管 ${u.manager}` : '，最高層'}）`;
+
+  function renderOrg() {
+    const nodeName = id => (registry.get(id) || {}).businessObject?.name || id;
+    const children = parent => users.filter(u => u.manager === parent);
+    const item = u => {
+      const signs = u.nodes.length ? `<span class="signs">可簽：${esc(u.nodes.map(nodeName).join('、'))}</span>` : '';
+      return `<li class="${u.id === state.user ? 'me' : ''}"><span>${esc(who(u.id))}</span>${signs}${tree(u.id)}</li>`;
+    };
+    const tree = parent => { const kids = children(parent); return kids.length ? `<ul>${kids.map(item).join('')}</ul>` : ''; };
+    $('#org').innerHTML = tree(null);
+  }
+
+  function toast(msg, isError = false) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.className = 'show' + (isError ? ' error' : '');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => el.className = '', 3200);
+  }
+
+  async function api(path, options = {}) {
+    const resp = await fetch(path, {
+      headers: { 'Content-Type': 'application/json' }, ...options,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    if (resp.status === 204) return null;
+    const data = await resp.json();
+    if (!resp.ok) {
+      const d = data.detail;
+      throw new Error(Array.isArray(d) ? d.map(e => e.msg).join('；') : d || resp.statusText);
+    }
+    return data;
+  }
+
+  function syncUrl() {
+    const p = new URLSearchParams({ user: state.user });
+    if (state.req) p.set('req', state.req);
+    history.replaceState(null, '', '?' + p);
+  }
+
+  // ---------- 單據列表 ----------
+  async function loadList(force = false) {
+    const rows = await api(`/api/requests?user=${state.user}`);
+    const json = JSON.stringify(rows) + state.req;
+    if (!force && json === lastListJson) return;
+    lastListJson = json;
+
+    const mine = rows.filter(r => r.my_turn).length;
+    $('#todo').textContent = mine ? `${mine} 張輪到你簽` : '沒有待簽';
+    $('#todo').className = 'chip' + (mine ? ' turn' : '');
+
+    const list = $('#request-list');
+    if (!rows.length) {
+      list.innerHTML = '<li class="empty" style="border:none;cursor:default">還沒有單據，從上面送出一張。</li>';
+      return;
+    }
+    list.innerHTML = rows.slice().reverse().map(r => `
+      <li data-id="${esc(r.id)}" class="${r.id === state.req ? 'active' : ''}">
+        <div class="r1"><b>${esc(r.id)}</b><span class="chip ${r.status}">${STATUS_LABEL[r.status]}</span>
+          ${r.my_turn ? '<span class="chip turn">輪到你</span>' : ''}</div>
+        <div class="r2">${esc(r.title)} · ${money(r.amount_total)} · ${esc(r.applicant)}</div>
+        ${r.pending.length && r.status === 'running' ? `<div class="r3">待簽：${r.pending.map(esc).join('、')}</div>` : ''}
+      </li>`).join('');
+  }
+
+  $('#request-list').addEventListener('click', e => {
+    const li = e.target.closest('li[data-id]');
+    if (li) selectRequest(li.dataset.id);
+  });
+
+  async function selectRequest(id) {
+    state.req = id;
+    syncUrl();
+    await Promise.all([loadList(true), loadDetail(true)]);
+  }
+
+  // ---------- 明細 ----------
+  async function loadDetail(force = false) {
+    if (!state.req) return render(null);
+    let d;
+    try {
+      d = await api(`/api/requests/${state.req}?user=${state.user}`);
+    } catch (err) {
+      state.req = null;
+      syncUrl();
+      return render(null);
+    }
+    const json = JSON.stringify(d);
+    if (!force && json === lastDetailJson) return;
+    lastDetailJson = json;
+    render(d);
+  }
+
+  function render(d) {
+    detail = d;
+    paintDiagram();
+    renderActions();
+    renderHistory();
+    renderTree();
+    if (picked) showNodeInfo(registry.get(picked));
+  }
+
+  function paintDiagram() {
+    markers.forEach(([id, cls]) => canvas.removeMarker(id, cls));
+    markers = [];
+    const add = (id, cls) => { if (registry.get(id)) { canvas.addMarker(id, cls); markers.push([id, cls]); } };
+    if (!detail) {
+      $('#diagram-title').textContent = '流程圖';
+      return;
+    }
+    const r = detail.record;
+    $('#diagram-title').innerHTML = `${esc(r.id)} ${esc(r.title)} · ${money(r.amount_total)} <span class="chip ${detail.status}">${STATUS_LABEL[detail.status]}</span>`;
+    Object.entries(detail.nodes).forEach(([id, st]) => add(id, 'st-' + st));
+    detail.pending.filter(p => p.can_act).forEach(p => add(p.node_id, 'my-turn'));
+    const taken = new Set(detail.taken.map(([a, b]) => a + '>' + b));
+    registry.filter(el => el.type === 'bpmn:SequenceFlow').forEach(el => {
+      const bo = el.businessObject;
+      if (taken.has(bo.sourceRef.id + '>' + bo.targetRef.id)) add(el.id, 'flow-taken');
+    });
+  }
+
+  function renderActions() {
+    const box = $('#actions');
+    // 別人簽核後待簽區會整個重畫，先記下還沒送出的意見，畫完再填回去
+    const key = `${state.req}|${state.user}`;
+    const drafts = box.dataset.key === key
+      ? Object.fromEntries([...box.querySelectorAll('.task')].map(c => [c.dataset.node, c.querySelector('textarea').value]))
+      : {};
+    const focused = document.activeElement?.closest('#actions .task')?.dataset.node;
+    box.dataset.key = key;
+    if (!detail) { box.innerHTML = '<p class="empty">先在左邊選一張單據。</p>'; return; }
+    if (detail.status === 'done') {
+      box.innerHTML = `<div class="notice done">已結案，單據狀態是 <b>${esc(detail.record.state)}</b>（由 BPMN 的「回寫單據狀態」節點改的）。</div>
+        <div class="hint" style="margin:10px 0 0">結案時的 <code>workflow.last_task.data</code>：每一關核准時寫進 <code>task.data</code> 的值，會一路傳到最後</div>
+        <pre class="data">${esc(JSON.stringify(detail.task_data, null, 2))}</pre>`;
+      return;
+    }
+    if (detail.status === 'cancelled') {
+      box.innerHTML = '<div class="notice cancelled">已作廢：申請人撤回了。程式呼叫了 <code>workflow.cancel()</code>，所以 task tree 裡沒做完的節點都變成 CANCELLED。</div>';
+      return;
+    }
+    const isApplicant = state.user === detail.record.applicant;
+    box.innerHTML = detail.pending.map(p => {
+      const names = p.approvers.map(who).join('、') || '（沒有人可以簽）';
+      const switchBtn = !p.can_act && p.approvers.length
+        ? `<button type="button" class="link" data-switch="${esc(p.approvers[0])}">切換成 ${esc(p.approvers[0])}</button>` : '';
+      if (p.stage === 'applicant') {
+        // 被退回：單據在申請人手上，可以改標題、金額重新送出，或撤回作廢
+        const r = detail.record;
+        return `
+        <div class="task ${p.can_act ? 'mine' : ''}" data-node="${esc(p.node_id)}">
+          <div class="t1"><b>${esc(p.node_name)}</b><span class="chip READY">已退回，等申請人</span></div>
+          <div class="meta">只有申請人 ${esc(who(r.applicant))} 能改；重新送出後再從「直屬主管審核」開始</div>
+          <div class="fields">
+            <label>標題<input name="title" value="${esc(r.title)}" maxlength="50" ${p.can_act ? '' : 'disabled'}></label>
+            <label>金額<input name="amount_total" type="number" min="1" step="1" value="${esc(r.amount_total)}" ${p.can_act ? '' : 'disabled'}></label>
+          </div>
+          <textarea name="comment" placeholder="說明（選填）" maxlength="200" ${p.can_act ? '' : 'disabled'}></textarea>
+          <div class="btns">
+            <button type="button" class="ok" data-act="resubmit" ${p.can_act ? '' : 'disabled'}>重新送出</button>
+            <button type="button" class="bad" data-act="withdraw" ${p.can_act ? '' : 'disabled'}>撤回</button>
+            ${p.can_act ? '' : `<span class="muted" style="font-size:12.5px">${esc(state.user)} 不是申請人</span>`} ${switchBtn}
+          </div>
+        </div>`;
+      }
+      const rejectText = p.reject_to ? `退回會回到「${esc(p.reject_to)}」` : '退回會整張作廢';
+      return `
+        <div class="task ${p.can_act ? 'mine' : ''}" data-node="${esc(p.node_id)}">
+          <div class="t1"><b>${esc(p.node_name)}</b><span class="chip READY">輪到這關</span></div>
+          <div class="meta">可簽核：${esc(names)}　·　${rejectText}</div>
+          <textarea name="comment" placeholder="簽核意見（選填）" maxlength="200" ${p.can_act ? '' : 'disabled'}></textarea>
+          <div class="btns">
+            <button type="button" class="ok" data-act="approve" ${p.can_act ? '' : 'disabled'}>核准</button>
+            <button type="button" class="bad" data-act="reject" ${p.can_act ? '' : 'disabled'}>退回</button>
+            ${p.can_act ? '' : `<span class="muted" style="font-size:12.5px">${esc(state.user)} 不能簽這關</span>`} ${switchBtn}
+          </div>
+        </div>`;
+    }).join('');
+    // 申請人在結案前隨時可以撤回
+    if (isApplicant && !detail.pending.some(p => p.stage === 'applicant')) {
+      box.insertAdjacentHTML('beforeend', `
+        <div class="task" data-node="">
+          <div class="meta">你是申請人，簽核中也可以撤回這張單（整張作廢）</div>
+          <textarea name="comment" placeholder="撤回原因（選填）" maxlength="200"></textarea>
+          <div class="btns"><button type="button" class="bad" data-act="withdraw">撤回</button></div>
+        </div>`);
+    }
+    box.querySelectorAll('.task').forEach(card => {
+      const textarea = card.querySelector('textarea');
+      if (textarea.disabled) return;
+      textarea.value = drafts[card.dataset.node] ?? '';
+      if (card.dataset.node === focused) textarea.focus();
+    });
+  }
+
+  $('#actions').addEventListener('click', async e => {
+    const sw = e.target.closest('[data-switch]');
+    if (sw) return switchUser(sw.dataset.switch);
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const card = btn.closest('.task');
+    const act = btn.dataset.act;
+    card.querySelectorAll('button').forEach(b => b.disabled = true);
+    const body = { user: state.user, node_id: card.dataset.node || null, comment: card.querySelector('textarea').value };
+    if (act === 'resubmit') {
+      body.title = card.querySelector('[name=title]').value;
+      body.amount_total = Number(card.querySelector('[name=amount_total]').value);
+    }
+    try {
+      const d = await api(`/api/requests/${state.req}/${act}`, { method: 'POST', body });
+      const last = d.history[d.history.length - 1];
+      toast(`${state.user} ${last.action}了「${last.node}」${last.result ? '，' + last.result : ''}`);
+      card.querySelector('textarea').value = '';
+      lastDetailJson = JSON.stringify(d);
+      render(d);
+      loadList(true);
+    } catch (err) {
+      toast(err.message, true);
+      loadDetail(true);
+    }
+  });
+
+  function renderHistory() {
+    const ul = $('#history');
+    if (!detail) { ul.innerHTML = '<li class="empty">—</li>'; return; }
+    ul.innerHTML = detail.history.slice().reverse().map(h => `
+      <li>
+        <span class="time">${esc(h.time.slice(11))}</span>
+        <b>${esc(who(h.user))}</b> <span class="act-${esc(h.action)}">${esc(h.action)}</span> ${esc(h.node)}
+        ${h.result ? `→ <b>${esc(h.result)}</b>` : ''}
+        ${h.comment ? `<div class="muted">「${esc(h.comment)}」</div>` : ''}
+      </li>`).join('');
+  }
+
+  function renderTree() {
+    const box = $('#tree');
+    const link = $('#json-link');
+    if (!detail) { box.innerHTML = '<p class="empty">—</p>'; link.textContent = ''; return; }
+    link.href = `/api/requests/${detail.record.id}/workflow-json`;
+    link.textContent = `序列化 JSON ${money(detail.json_size)} bytes ↗`;
+    box.innerHTML = detail.tree.map(t => `
+      <div class="row" data-node="${esc(t.node_id)}" style="padding-left:${6 + t.depth * 16}px">
+        <span class="branch">${t.depth ? '└' : ''}</span>
+        <span class="name">${esc(t.node_name || t.node_id)}</span>
+        <span class="type">${esc(t.type)}</span>
+        <span class="chip ${t.state}">${t.state}</span>
+      </div>`).join('');
+  }
+
+  let hovered = null;
+  function hoverNode(id) {
+    if (hovered) canvas.removeMarker(hovered, 'tree-hover');
+    hovered = id && registry.get(id) ? id : null;
+    if (hovered) canvas.addMarker(hovered, 'tree-hover');
+  }
+  $('#tree').addEventListener('mouseover', e => hoverNode(e.target.closest('.row')?.dataset.node));
+  $('#tree').addEventListener('mouseleave', () => hoverNode(null));
+
+  // ---------- 節點說明 ----------
+  function showNodeInfo(element) {
+    if (!element) return;
+    if (element.type === 'label') element = element.labelTarget;
+    const bo = element.businessObject;
+    const [zh, spiff] = TYPE_INFO[bo.$type] || [bo.$type, ''];
+    const rows = [['類型', `${esc(zh)} <code>${esc(bo.$type.replace('bpmn:', ''))}</code>`], ['id', `<code>${esc(bo.id)}</code>`]];
+    if (bo.name) rows.push(['name', esc(bo.name)]);
+    if (bo.$type === 'bpmn:UserTask') {
+      const signers = users.filter(u => u.nodes.includes(bo.id)).map(u => who(u.id));
+      rows.push(['可簽核', esc(signers.join('、') || '（沒有設定）')]);
+    }
+    if (detail && detail.nodes[bo.id]) {
+      const st = detail.nodes[bo.id];
+      const count = detail.tree.filter(t => t.node_id === bo.id).length;
+      rows.push(['這張單', `<span class="chip ${st}">${STATE_LABEL[st]}</span> <code>${st}</code>${count > 1 ? `　task tree 裡有 ${count} 份` : ''}`]);
+    }
+    if (bo.sourceRef && bo.targetRef) {
+      rows.push(['方向', `${esc(bo.sourceRef.name || bo.sourceRef.id)} → ${esc(bo.targetRef.name || bo.targetRef.id)}`]);
+      if (bo.conditionExpression) rows.push(['條件', `<code>${esc(bo.conditionExpression.body)}</code>`]);
+      else if (bo.sourceRef.default === bo) rows.push(['條件', '無（閘道的 default 連線）']);
+    }
+    if (bo.default) rows.push(['default', `<code>${esc(bo.default.id)}</code>`]);
+    if (bo.script) rows.push(['script', `<code>${esc(bo.script)}</code>`]);
+    let note = spiff;
+    if (bo.conditionExpression) note += ' 條件由 script engine 的 evaluate() 計算，workflow.py 的 RecordScriptEnvironment 把單據放進 self，所以能寫 self.amount_total。';
+
+    $('#node-info').innerHTML = `
+      <div class="card-head"><h2>節點說明：${esc(bo.name || bo.id)}</h2></div>
+      <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+      ${note ? `<div class="spiff"><b>SpiffWorkflow：</b>${esc(note)}</div>` : ''}`;
+
+    if (picked && picked !== element.id) canvas.removeMarker(picked, 'picked');
+    if (element.type !== 'bpmn:Process') {
+      canvas.addMarker(element.id, 'picked');
+      picked = element.id;
+    }
+  }
+  viewer.get('eventBus').on('element.click', e => showNodeInfo(e.element));
+
+  // ---------- 身分、送出、清空 ----------
+  function switchUser(uid) {
+    state.user = uid;
+    $('#user').value = uid;
+    $('#create-btn').textContent = `以 ${who(uid)} 的身分送出`;
+    const manager = managerOf(uid);
+    $('#manager-hint').textContent = manager
+      ? `第一關「直屬主管審核」會由 ${who(manager)} 簽；申請人不能簽自己的單`
+      : `${uid} 沒有直屬主管，不能送單`;
+    $('#create-btn').disabled = !manager;
+    renderOrg();
+    syncUrl();
+    loadList(true);
+    loadDetail(true);
+  }
+  $('#user').addEventListener('change', e => switchUser(e.target.value));
+
+  document.querySelectorAll('[data-amount]').forEach(b =>
+    b.addEventListener('click', () => $('#create-form').elements.amount_total.value = b.dataset.amount));
+
+  $('#create-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    // form.title 是表單自己的 title 屬性，欄位要從 form.elements 拿
+    const f = e.target.elements;
+    try {
+      const d = await api('/api/requests', {
+        method: 'POST', body: { user: state.user, title: f.title.value, amount_total: Number(f.amount_total.value) },
+      });
+      toast(`已送出 ${d.record.id}，目前在「${d.pending.map(p => p.node_name).join('、')}」`);
+      selectRequest(d.record.id);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  $('#clear').addEventListener('click', async () => {
+    if (!confirm('清空所有單據？')) return;
+    await api('/api/requests', { method: 'DELETE' });
+    state.req = null;
+    syncUrl();
+    loadList(true);
+    render(null);
+  });
+
+  // 多開分頁扮演不同人時，定期同步別人做的動作
+  setInterval(() => { if (!document.hidden) { loadList(); loadDetail(); } }, 4000);
+  window.addEventListener('focus', () => { loadList(); loadDetail(); });
+
+  (async function init() {
+    users = await api('/api/users');
+    $('#user').innerHTML = users.map(u => `<option value="${u.id}">${esc(optionLabel(u))}</option>`).join('');
+    if (!users.some(u => u.id === state.user)) state.user = 'dave';
+    await viewer.importXML(await (await fetch('/api/bpmn')).text());
+    canvas.zoom('fit-viewport', 'auto');
+    switchUser(state.user);
+  })().catch(err => toast('初始化失敗：' + err.message, true));
+</script>
+</body>
+</html>

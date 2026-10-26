@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.tmp
+
+# 執行時產生的單據資料
+data/
+
+# pyenv 虛擬環境名稱因人而異
+.python-version

@@ -1,0 +1,2 @@
+# 操作頁把 CSS、JS 都寫在同一個 HTML 裡，不列入 GitHub 的語言統計
+static/index.html -linguist-detectable

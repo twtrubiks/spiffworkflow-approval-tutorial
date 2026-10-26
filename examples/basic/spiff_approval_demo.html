@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>請購簽核流程圖</title>
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/diagram-js.css">
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-js.css">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1f2328; --muted: #656d76;
+    --border: #d0d7de; --accent: #0969da; --hl: #fff8c5; --code-bg: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #8d96a0;
+      --border: #30363d; --accent: #4493f8; --hl: #3b2e00; --code-bg: #0d1117;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.6 system-ui, "Noto Sans TC", "PingFang TC", sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  /* 畫布固定白底，bpmn-js 的圖是黑線白底 */
+  #canvas { height: 380px; background: #fff; border-radius: 10px; position: relative; }
+  #canvas.dragover { outline: 3px dashed var(--accent); outline-offset: -6px; }
+  .hint { color: var(--muted); font-size: 13px; padding: 8px 12px; border-top: 1px solid var(--border); }
+  #info { padding: 14px 16px; }
+  #info h2 { font-size: 16px; margin: 0 0 8px; }
+  #info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 14px; }
+  #info dt { color: var(--muted); }
+  #info dd { margin: 0; word-break: break-all; }
+  #info code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .spiff { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--accent);
+           background: var(--code-bg); font-size: 14px; border-radius: 0 6px 6px 0; }
+  .legend { margin-top: 16px; padding: 14px 16px; font-size: 14px; }
+  .legend h2 { font-size: 16px; margin: 0 0 8px; }
+  .legend table { border-collapse: collapse; width: 100%; }
+  .legend td { padding: 4px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+  .legend td:first-child { white-space: nowrap; color: var(--muted); }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; padding: 12px 16px; font-weight: 600; }
+  pre { margin: 0; padding: 0 0 12px; overflow: auto; max-height: 480px; position: relative;
+        font: 13px/1.5 ui-monospace, "JetBrains Mono", monospace;
+        background: var(--code-bg); border-top: 1px solid var(--border); }
+  pre .ln { display: block; padding: 0 16px; white-space: pre; }
+  pre .ln.hl { background: var(--hl); }
+  pre .ln.di { color: var(--muted); }
+  #error { color: #cf222e; padding: 8px 12px; display: none; }
+  /* 被點選的節點 / 連線 */
+  .picked .djs-visual > :nth-child(1) { stroke: #0969da !important; stroke-width: 3px !important; }
+  .picked .djs-visual > path { stroke: #0969da !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>請購簽核流程圖</h1>
+  <p class="sub">把 <code>spiff_approval_demo.bpmn</code> 的 XML 畫出來。點圖上的節點或連線，右邊會顯示它在 XML 裡的定義，下方 XML 也會標出對應的行。</p>
+
+  <div class="layout">
+    <div class="card">
+      <div id="canvas"></div>
+      <div id="error"></div>
+      <div class="hint">滑鼠滾輪縮放、拖曳平移。也可以把其他 <code>.bpmn</code> 檔拖進畫布來看。</div>
+    </div>
+    <div class="card" id="info">
+      <h2>點一個節點看看</h2>
+      <p class="sub" style="margin:0">例如點「金額判斷」上面那條線，可以看到 SpiffWorkflow 用來判斷的條件。</p>
+    </div>
+  </div>
+
+  <div class="card legend">
+    <h2>圖形與 XML 標籤對照</h2>
+    <table>
+      <tr><td>細線圓圈</td><td><code>&lt;bpmn:startEvent&gt;</code> 開始事件。<code>do_engine_steps()</code> 一開始就自動通過</td></tr>
+      <tr><td>粗線圓圈</td><td><code>&lt;bpmn:endEvent&gt;</code> 結束事件。走到這裡 <code>workflow.completed</code> 會變成 True</td></tr>
+      <tr><td>方框＋人像</td><td><code>&lt;bpmn:userTask&gt;</code> 人工任務。流程會停在這裡，等程式呼叫 <code>task.complete()</code></td></tr>
+      <tr><td>方框＋捲軸</td><td><code>&lt;bpmn:scriptTask&gt;</code> 腳本任務。<code>do_engine_steps()</code> 時自動執行裡面的 Python</td></tr>
+      <tr><td>菱形＋X</td><td><code>&lt;bpmn:exclusiveGateway&gt;</code> 互斥閘道。依連線上的條件只走其中一條</td></tr>
+      <tr><td>線頭有斜槓</td><td>閘道的 <code>default</code> 連線。其他條件都不成立時走這條</td></tr>
+      <tr><td>箭頭線</td><td><code>&lt;bpmn:sequenceFlow&gt;</code> 連線。可以帶 <code>&lt;conditionExpression&gt;</code> 條件</td></tr>
+    </table>
+  </div>
+
+  <details class="card" open>
+    <summary>XML 原始碼（灰色部分是圖面座標，SpiffWorkflow 不會讀）</summary>
+    <pre id="xml"></pre>
+  </details>
+</main>
+
+<!-- 內容與 spiff_approval_demo.bpmn 相同；改了 .bpmn 之後可以直接把檔案拖進畫布 -->
+<script type="text/plain" id="bpmn-source">
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+
+  <!-- ===== 流程邏輯：SpiffWorkflow 只讀這一段 ===== -->
+  <bpmn:process id="purchase_approval" name="請購簽核" isExecutable="true">
+    <bpmn:startEvent id="start" name="送出申請">
+      <bpmn:outgoing>flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:userTask id="manager_approve" name="直屬主管審核">
+      <bpmn:incoming>flow_1</bpmn:incoming>
+      <bpmn:outgoing>flow_2</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="amount_gateway" name="金額判斷" default="flow_small">
+      <bpmn:incoming>flow_2</bpmn:incoming>
+      <bpmn:outgoing>flow_big</bpmn:outgoing>
+      <bpmn:outgoing>flow_small</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="cfo_approve" name="財務長審核">
+      <bpmn:incoming>flow_big</bpmn:incoming>
+      <bpmn:outgoing>flow_3</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:scriptTask id="write_back" name="回寫單據狀態">
+      <bpmn:incoming>flow_small</bpmn:incoming>
+      <bpmn:incoming>flow_3</bpmn:incoming>
+      <bpmn:outgoing>flow_4</bpmn:outgoing>
+      <bpmn:script>approval_result = 'approved'</bpmn:script>
+    </bpmn:scriptTask>
+
+    <bpmn:endEvent id="end" name="結案">
+      <bpmn:incoming>flow_4</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="flow_1" sourceRef="start" targetRef="manager_approve" />
+    <bpmn:sequenceFlow id="flow_2" sourceRef="manager_approve" targetRef="amount_gateway" />
+    <bpmn:sequenceFlow id="flow_big" name="金額 &gt; 10000" sourceRef="amount_gateway" targetRef="cfo_approve">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">self.amount_total &gt; 10000</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_small" name="其他（預設）" sourceRef="amount_gateway" targetRef="write_back" />
+    <bpmn:sequenceFlow id="flow_3" sourceRef="cfo_approve" targetRef="write_back" />
+    <bpmn:sequenceFlow id="flow_4" sourceRef="write_back" targetRef="end" />
+  </bpmn:process>
+
+  <!-- ===== 圖面座標：只給畫圖工具（bpmn-js 等）用，SpiffWorkflow 會忽略 ===== -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="purchase_approval">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="146" y="225" width="48" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="manager_approve_di" bpmnElement="manager_approve">
+        <dc:Bounds x="240" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="amount_gateway_di" bpmnElement="amount_gateway" isMarkerVisible="true">
+        <dc:Bounds x="395" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="396" y="232" width="48" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="cfo_approve_di" bpmnElement="cfo_approve">
+        <dc:Bounds x="500" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="write_back_di" bpmnElement="write_back">
+        <dc:Bounds x="640" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end">
+        <dc:Bounds x="802" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="808" y="225" width="24" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="flow_1_di" bpmnElement="flow_1">
+        <di:waypoint x="188" y="200" />
+        <di:waypoint x="240" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_2_di" bpmnElement="flow_2">
+        <di:waypoint x="340" y="200" />
+        <di:waypoint x="395" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_big_di" bpmnElement="flow_big">
+        <di:waypoint x="420" y="175" />
+        <di:waypoint x="420" y="80" />
+        <di:waypoint x="500" y="80" />
+        <bpmndi:BPMNLabel><dc:Bounds x="428" y="120" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_small_di" bpmnElement="flow_small">
+        <di:waypoint x="445" y="200" />
+        <di:waypoint x="640" y="200" />
+        <bpmndi:BPMNLabel><dc:Bounds x="505" y="180" width="72" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_3_di" bpmnElement="flow_3">
+        <di:waypoint x="600" y="80" />
+        <di:waypoint x="690" y="80" />
+        <di:waypoint x="690" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow_4_di" bpmnElement="flow_4">
+        <di:waypoint x="740" y="200" />
+        <di:waypoint x="802" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
+</script>
+
+<script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-navigated-viewer.production.min.js"></script>
+<script>
+  const TYPE_INFO = {
+    'bpmn:StartEvent': ['開始事件', 'do_engine_steps() 一開始就自動通過。'],
+    'bpmn:EndEvent': ['結束事件', '走到這裡整個流程結束，workflow.completed 變成 True。'],
+    'bpmn:UserTask': ['人工任務', '流程停在這裡（狀態 READY），等程式找到它並呼叫 task.complete()。範例裡誰能簽是 APPROVERS 字典決定的。'],
+    'bpmn:ScriptTask': ['腳本任務', 'do_engine_steps() 時自動交給 script engine 的 execute() 執行 script 內容。'],
+    'bpmn:ExclusiveGateway': ['互斥閘道', 'do_engine_steps() 時逐條計算連線上的條件，只走成立的那一條；都不成立就走 default 連線。'],
+    'bpmn:SequenceFlow': ['連線', '把兩個節點接起來。從閘道出去的連線可以帶條件。'],
+    'bpmn:Process': ['流程', 'parser.get_process_ids() 取到的就是這個 id。'],
+  };
+
+  const viewer = new BpmnJS({ container: '#canvas' });
+  const canvas = viewer.get('canvas');
+  const infoEl = document.getElementById('info');
+  const xmlEl = document.getElementById('xml');
+  const errorEl = document.getElementById('error');
+  let xmlLines = [];
+  let picked = null;
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderXml(xml) {
+    xmlLines = xml.split('\n');
+    let inDi = false;
+    xmlEl.innerHTML = xmlLines.map((line, i) => {
+      if (line.includes('<bpmndi:BPMNDiagram') || line.includes('圖面座標')) inDi = true;
+      const cls = inDi ? 'ln di' : 'ln';
+      return `<span class="${cls}" data-i="${i}">${escapeHtml(line) || ' '}</span>`;
+    }).join('');
+  }
+
+  function highlightXml(id) {
+    xmlEl.querySelectorAll('.hl').forEach(el => el.classList.remove('hl'));
+    const start = xmlLines.findIndex(l => l.includes(`id="${id}"`) && l.includes('<bpmn:'));
+    if (start < 0) return;
+    const tag = (xmlLines[start].match(/<bpmn:(\w+)/) || [])[1];
+    let end = start;
+    if (tag && !xmlLines[start].trim().endsWith('/>')) {
+      end = xmlLines.findIndex((l, i) => i >= start && l.includes(`</bpmn:${tag}>`));
+      if (end < 0) end = start;
+    }
+    const spans = xmlEl.querySelectorAll('.ln');
+    for (let i = start; i <= end; i++) spans[i].classList.add('hl');
+    // 只捲動 XML 區塊本身，不要把整頁捲走
+    xmlEl.scrollTo({ top: spans[start].offsetTop - 40, behavior: 'smooth' });
+  }
+
+  function showInfo(element) {
+    if (element.type === 'label') element = element.labelTarget;
+    const bo = element.businessObject;
+    if (!bo) return;
+    let [zh, spiff] = TYPE_INFO[bo.$type] || [bo.$type, ''];
+    if (bo.conditionExpression) {
+      spiff += '這條的條件由 script engine 的 evaluate() 計算，範例的 RecordScriptEnvironment 會把單據放進 self，所以能寫 self.amount_total。';
+    }
+    const tag = bo.$type.replace('bpmn:', '');
+    const rows = [
+      ['XML 標籤', `<code>&lt;bpmn:${tag[0].toLowerCase() + tag.slice(1)}&gt;</code>`],
+      ['類型', escapeHtml(zh)],
+      ['id', `<code>${escapeHtml(bo.id)}</code>`],
+    ];
+    if (bo.name) rows.push(['name', escapeHtml(bo.name)]);
+    if (bo.sourceRef && bo.targetRef) {
+      rows.push(['方向', `${escapeHtml(bo.sourceRef.name || bo.sourceRef.id)} → ${escapeHtml(bo.targetRef.name || bo.targetRef.id)}`]);
+    }
+    if (bo.conditionExpression) rows.push(['條件', `<code>${escapeHtml(bo.conditionExpression.body)}</code>`]);
+    if (bo.$type === 'bpmn:SequenceFlow' && bo.sourceRef.default === bo) rows.push(['條件', '無（閘道的 default 連線）']);
+    if (bo.default) rows.push(['default', `<code>${escapeHtml(bo.default.id)}</code>`]);
+    if (bo.script) rows.push(['script', `<code>${escapeHtml(bo.script)}</code>`]);
+
+    infoEl.innerHTML = `
+      <h2>${escapeHtml(bo.name || bo.id)}</h2>
+      <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+      ${spiff ? `<div class="spiff"><b>SpiffWorkflow：</b>${escapeHtml(spiff)}</div>` : ''}`;
+
+    if (picked) canvas.removeMarker(picked, 'picked');
+    if (element.type !== 'bpmn:Process') {
+      canvas.addMarker(element.id, 'picked');
+      picked = element.id;
+    }
+    highlightXml(bo.id);
+  }
+
+  async function load(xml) {
+    errorEl.style.display = 'none';
+    picked = null;
+    try {
+      await viewer.importXML(xml);
+      canvas.zoom('fit-viewport', 'auto');
+      renderXml(xml);
+    } catch (err) {
+      errorEl.textContent = '畫不出來：' + err.message + '（XML 裡要有 <bpmndi:BPMNDiagram> 座標區塊）';
+      errorEl.style.display = 'block';
+    }
+  }
+
+  viewer.get('eventBus').on('element.click', e => showInfo(e.element));
+
+  const canvasEl = document.getElementById('canvas');
+  canvasEl.addEventListener('dragover', e => { e.preventDefault(); canvasEl.classList.add('dragover'); });
+  canvasEl.addEventListener('dragleave', () => canvasEl.classList.remove('dragover'));
+  canvasEl.addEventListener('drop', async e => {
+    e.preventDefault();
+    canvasEl.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) load(await file.text());
+  });
+
+  load(document.getElementById('bpmn-source').textContent.trim());
+</script>
+</body>
+</html>
